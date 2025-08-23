@@ -1,0 +1,80 @@
+version: '3.3'
+
+services:
+  db:
+    container_name: database
+    image: postgres:14
+    environment:
+      POSTGRES_DB: $DB_NAME
+      POSTGRES_USER: $DB_USER
+      POSTGRES_PASSWORD: $PG_PASSWORD
+      POSTGRES_PASSWORD_ENCRYPTION: scram-sha-256
+    restart: always
+    command: "postgres -c max_connections=150
+                 -c shared_buffers=512MB -c effective_cache_size=1536MB
+                 -c maintenance_work_mem=128MB -c checkpoint_completion_target=0.9 -c wal_buffers=16MB
+                 -c default_statistics_target=100 -c random_page_cost=1.1 -c effective_io_concurrency=200
+                 -c work_mem=3495kB -c min_wal_size=1GB -c max_wal_size=4GB -c max_worker_processes=2
+                 -c max_parallel_workers_per_gather=1 -c max_parallel_workers=2 -c max_parallel_maintenance_workers=1"
+    ports:
+      - "5439:5432"
+    networks:
+      - tg_bot
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+    env_file:
+      - ".env"
+
+  django:
+    container_name: admin_panel
+    build:
+      context: .
+    command: >
+      sh -c "
+      python django_app.py migrate &&
+      python django_app.py runserver 0.0.0.0:80 --noreload"
+    ports:
+      - "80:80"
+    networks:
+      - tg_bot
+    restart: always
+    env_file:
+      - ".env"
+    depends_on:
+      - db
+    volumes:
+      - ./admin_panel/media:/usr/src/app/tg_bot/admin_panel/media
+      - ./logs:/usr/src/app/tg_bot/logs
+
+
+  bot:
+    image: "${BOT_IMAGE_NAME:-tg_bot-image}"
+    container_name: "${BOT_CONTAINER_NAME:-tg_bot-container}"
+    stop_signal: SIGINT
+    build:
+      context: .
+    working_dir: "/usr/src/app/tg_bot"
+    volumes:
+      - ./admin_panel/media:/usr/src/app/tg_bot/admin_panel/media
+      - ./logs:/usr/src/app/tg_bot/logs
+    command: python3 -m bot
+    restart: always
+    env_file:
+      - ".env"
+    networks:
+      - tg_bot
+    depends_on:
+      - db
+      - django
+
+
+
+
+networks:
+  tg_bot:
+    driver: bridge
+
+
+volumes:
+  redis_data:
+    external: false
