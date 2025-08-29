@@ -3,6 +3,9 @@ from dataclasses import dataclass
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from environs import Env
 
+from tgbot.services.chat_gpt import ChatGPTService
+from tgbot.services.video_generate import VideoGeneratorService
+
 
 @dataclass
 class DbConfig:
@@ -25,6 +28,8 @@ class TgBot:
     token: str
     admin_ids: list[int]
     use_redis: bool
+    veo_svc: VideoGeneratorService
+    gpt_svc: ChatGPTService
 
 
 @dataclass
@@ -52,6 +57,12 @@ def load_config(path: str = None):
             token=env.str("BOT_TOKEN"),
             admin_ids=list(map(int, env.list("ADMINS"))),
             use_redis=env.bool("USE_REDIS"),
+            veo_svc=VideoGeneratorService(
+                prompt_file=env.str("PROMPT_FILE"),
+                prompt_api_key=env.str("OPENROUTER_API_KEY"),
+                video_api_token=env.str("VEO_API_KEY")
+            ),
+            gpt_svc=ChatGPTService(api_key=env.str("OPENAI_API_KEY"))
         ),
         db=DbConfig(
             host=env.str("DB_HOST"),

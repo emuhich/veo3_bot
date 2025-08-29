@@ -2,4 +2,9 @@ from aiogram.fsm.state import StatesGroup, State
 
 
 class States(StatesGroup):
-    state_1 = State()
+    prompt = State()
+    photo = State()
+
+
+class ChatStates(StatesGroup):
+    free_chat_question = State()

@@ -12,7 +12,6 @@ from aioredis import Redis
 
 from tgbot.config import load_config, Config
 from tgbot.handlers.echo import echo_router
-from tgbot.handlers.user import user_router
 from tgbot.middlewares.config import ConfigMiddleware
 from tgbot.middlewares.exaption import LogExceptionsMiddleware
 from tgbot.misc.logging import configure_logger
@@ -23,7 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 def scheduler_jobs(bot, config: Config):
-    pass
+    from tgbot.misc.tasks import send_user_video
+
+    config.misc.scheduler.add_job(send_user_video, "interval", minutes=1,
+                                  kwargs={
+                                      'bot': bot,
+                                      'config': config
+                                  })
 
 
 async def on_startup(bot: Bot, admin_ids: list[int], config):
@@ -36,7 +41,7 @@ async def on_startup(bot: Bot, admin_ids: list[int], config):
 def register_global_middlewares(dp: Dispatcher, config):
     dp.message.outer_middleware(ConfigMiddleware(config))
     dp.callback_query.outer_middleware(ConfigMiddleware(config))
-    dp.update.outer_middleware(LogExceptionsMiddleware())
+    # dp.update.outer_middleware(LogExceptionsMiddleware())
 
 
 def setup_django():
@@ -64,7 +69,11 @@ async def main():
     )
     dp = Dispatcher(storage=storage)
 
-    for router in [user_router, echo_router]:
+    from tgbot.handlers.user import user_router
+    from tgbot.handlers.video_create import video_router
+    from tgbot.handlers.chat_gpt import chat_router
+
+    for router in [user_router, video_router, chat_router, echo_router]:
         dp.include_router(router)
 
     register_global_middlewares(dp, config)
