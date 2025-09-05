@@ -148,6 +148,11 @@ LOGGING = {
             "filename": filename,
             "formatter": "verbose",
         },
+        "console": {                                    # <— новый консольный вывод
+            "level": "INFO",
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
     },
     "formatters": {
         "verbose": {
@@ -156,7 +161,7 @@ LOGGING = {
         },
     },
     "root": {
-        "handlers": ["file"],
+        "handlers": ["file", "console"],               # <— добавлен console
         "level": "INFO",
     },
 }

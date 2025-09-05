@@ -5,10 +5,9 @@ from typing import Union
 
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from admin_panel.telebot.models import Client, VideoGeneration
-from bot import logger
 from tgbot.config import Config
 from tgbot.keyboards.inline import video_format_kb, side_orientation_kb, back_to_menu_kb, wait_photo_kb, video_count_kb
 from tgbot.misc.states import States
@@ -127,6 +126,10 @@ async def choose_video_count(call: CallbackQuery, state: FSMContext, config: Con
     await generate_multiple_videos(call.message, state, config, count)
 
 
+FAST_COST = 2
+QUALITY_COST = 4
+
+
 async def generate_multiple_videos(message: Message, state: FSMContext, config: Config, count: int):
     data = await state.get_data()
     prompt = data.get("prompt")
@@ -140,11 +143,35 @@ async def generate_multiple_videos(message: Message, state: FSMContext, config: 
         await state.set_state(None)
         return
 
-    # Завершаем FSM (дальше только фоновые ожидания)
+    user: Client = await select_client(message.chat.id)
+
+    per_video_cost = FAST_COST if model == "veo3_fast" else QUALITY_COST
+    total_cost = per_video_cost * count
+
+    if user.balance < total_cost:
+        need = total_cost - user.balance
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Пополнить баланс", callback_data="topup_start")],
+            [InlineKeyboardButton(text="Назад в меню", callback_data="back_to_menu")]
+        ])
+        await message.answer(
+            f"Недостаточно монет.\nНужно: {total_cost}, у вас: {user.balance} (не хватает {need}).",
+            reply_markup=kb
+        )
+        await state.set_state(None)
+        return
+
+    # Списание монет единым блоком
+    user.balance -= total_cost
+    user.save(update_fields=["balance"])
+    await message.answer(
+        f"Списано {total_cost} монет за {count} видео (по {per_video_cost} за каждое). Текущий баланс: {user.balance}."
+    )
+
     await state.set_state(None)
 
     for idx in range(count):
-        progress_msg = await message.answer(f"({idx+1}/{count}) Адаптирую промпт под запрос ...")
+        progress_msg = await message.answer(f"({idx + 1}/{count}) Адаптирую промпт ...")
         try:
             response = await config.tg_bot.veo_svc.generate_video(
                 prompt_user=prompt,
@@ -154,62 +181,61 @@ async def generate_multiple_videos(message: Message, state: FSMContext, config: 
                 image_filename=image_filename,
             )
         except Exception as e:
-            logger.error(f"Video generation error #{idx+1}: {e}")
             try:
                 await progress_msg.edit_text(
-                    f"({idx+1}/{count}) Ошибка запуска генерации.",
-                    reply_markup=await back_to_menu_kb()
+                    f"({idx + 1}/{count}) Ошибка запуска задачи."
                 )
             except Exception:
                 pass
-            continue
-
-        # Извлекаем taskId
-        task_id = None
-        resp_data = response.get("data")
-        if isinstance(resp_data, dict):
-            task_id = resp_data.get("taskId")
-
-        if not task_id:
-            logger.error(f"No taskId in response #{idx+1}: {response}")
-            try:
-                await progress_msg.edit_text(
-                    f"({idx+1}/{count}) Ошибка генерации видео.",
-                    reply_markup=await back_to_menu_kb()
-                )
-            except Exception:
-                pass
-            continue
-
-        # Обновляем сообщение о запуске
-        try:
-            await progress_msg.edit_text(
-                f"({idx+1}/{count}) Генерирую видео ... Это может занять несколько минут ..."
+            # Возврат за конкретное несозданное задание
+            user.refresh_from_db()
+            user.balance += per_video_cost
+            user.save(update_fields=["balance"])
+            await message.answer(
+                f"Возврат {per_video_cost} мон (не удалось создать задачу). Баланс: {user.balance}."
             )
+            continue
+
+        task_id = (response.get("data") or {}).get("taskId")
+        if not task_id:
+            try:
+                await progress_msg.edit_text(f"({idx + 1}/{count}) Ошибка: нет taskId.")
+            except Exception:
+                pass
+            user.refresh_from_db()
+            user.balance += per_video_cost
+            user.save(update_fields=["balance"])
+            await message.answer(
+                f"Возврат {per_video_cost} мон (нет taskId). Баланс: {user.balance}."
+            )
+            continue
+
+        try:
+            await progress_msg.edit_text(f"({idx + 1}/{count}) Генерация... Ожидайте.")
         except Exception:
             pass
 
-        # Создаём запись VideoGeneration (in_progress)
         try:
-            user: Client = await select_client(message.chat.id)
             await AsyncDatabaseOperations.create_object(
                 VideoGeneration,
                 client=user,
                 task_id=task_id,
-                message_id=progress_msg.message_id
+                message_id=progress_msg.message_id,
+                coins_charged=per_video_cost
             )
-        except Exception as e:
-            logger.error(f"DB save error for video #{idx+1}: {e}")
+        except Exception:
+            user.refresh_from_db()
+            user.balance += per_video_cost
+            user.save(update_fields=["balance"])
             try:
                 await progress_msg.edit_text(
-                    f"({idx+1}/{count}) Ошибка сохранения задачи.",
-                    reply_markup=await back_to_menu_kb()
+                    f"({idx + 1}/{count}) Ошибка сохранения задачи. Возврат {per_video_cost} мон."
                 )
             except Exception:
                 pass
             continue
 
     await message.answer(
-        "Все задачи поставлены в очередь. Ожидайте отправки видео.",
+        "Все задачи поставлены. Ожидайте результатов.",
         reply_markup=await back_to_menu_kb()
     )

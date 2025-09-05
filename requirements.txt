@@ -31,3 +31,5 @@ yarl==1.8.2
 django-admin-interface
 black
 requests
+aiocryptopay
+yookassa

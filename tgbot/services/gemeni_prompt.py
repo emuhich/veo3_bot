@@ -37,5 +37,5 @@ class GeminiPromptService:
                     data = await response.json()
                     return data['choices'][0]['message']['content']
         except Exception as e:
-            print(f"Ошибка: {e}")
+            print(f"Ошибка генерации промпта: {e}")
             return None

@@ -3,8 +3,8 @@ from admin_interface.models import Theme
 from django.contrib import admin
 from django.contrib.admin import AdminSite
 from django.utils.html import format_html
-
-from admin_panel.telebot.models import Client, VideoGeneration
+from django.utils import timezone
+from admin_panel.telebot.models import Client, VideoGeneration, Payment
 
 
 class BotAdminSite(AdminSite):
@@ -54,3 +54,43 @@ class VideoGenerationAdmin(admin.ModelAdmin):
     search_fields = ("client__username", "client__telegram_id", "task_id")
     empty_value_display = "-пусто-"
     readonly_fields = ("created", "updated")
+
+
+@admin.register(Payment, site=bot_admin)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "client",
+        "method",
+        "status",
+        "coins_requested",
+        "amount_rub",
+        "external_id",
+        "created",
+        "completed_at",
+    )
+    list_filter = ("method", "status", "created")
+    search_fields = ("client__username", "client__telegram_id", "external_id", "id")
+    readonly_fields = ("created", "updated", "completed_at")
+    empty_value_display = "-пусто-"
+    actions = ["mark_as_paid"]
+
+    def mark_as_paid(self, request, queryset):
+        now = timezone.now()
+        updated = 0
+        for obj in queryset:
+            if obj.status != "paid":
+                obj.status = "paid"
+                if not obj.completed_at:
+                    obj.completed_at = now
+                obj.save(update_fields=["status", "completed_at"])
+                # Начисление монет клиенту (если ещё не было)
+                # Проверяем, чтобы не было двойного начисления
+                # (можно хранить флаг, но здесь упрощённо — если статус был не paid)
+                client = obj.client
+                client.balance += obj.coins_requested
+                client.save(update_fields=["balance"])
+                updated += 1
+        self.message_user(request, f"Отмечено оплаченных: {updated}")
+
+    mark_as_paid.short_description = "Отметить выбранные как оплаченные"

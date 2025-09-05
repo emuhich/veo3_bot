@@ -22,9 +22,14 @@ logger = logging.getLogger(__name__)
 
 
 def scheduler_jobs(bot, config: Config):
-    from tgbot.misc.tasks import send_user_video
+    from tgbot.misc.tasks import send_user_video, check_pending_payments
 
     config.misc.scheduler.add_job(send_user_video, "interval", minutes=1,
+                                  kwargs={
+                                      'bot': bot,
+                                      'config': config
+                                  })
+    config.misc.scheduler.add_job(check_pending_payments, "interval", minutes=5,
                                   kwargs={
                                       'bot': bot,
                                       'config': config
@@ -72,8 +77,9 @@ async def main():
     from tgbot.handlers.user import user_router
     from tgbot.handlers.video_create import video_router
     from tgbot.handlers.chat_gpt import chat_router
+    from tgbot.handlers.balance import balance_router
 
-    for router in [user_router, video_router, chat_router, echo_router]:
+    for router in [user_router, video_router, chat_router, balance_router, echo_router]:
         dp.include_router(router)
 
     register_global_middlewares(dp, config)

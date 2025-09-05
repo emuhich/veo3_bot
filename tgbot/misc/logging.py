@@ -1,6 +1,5 @@
 import logging
 import sys
-
 from loguru import logger
 
 
@@ -17,13 +16,11 @@ class InterceptHandler(logging.Handler):
         return self.LEVELS_MAP.get(record.levelno, record.levelno)
 
     def emit(self, record):
-        logger_opt = logger.opt(depth=6, exception=record.exc_info)
-        logger_opt.log(self._get_level(record), record.getMessage())
+        logger.opt(depth=6, exception=record.exc_info).log(self._get_level(record), record.getMessage())
 
 
 def configure_logger(capture_exceptions: bool = False) -> None:
     logger.remove()
-    level = "INFO"
     logger.add(
         "logs/log_{time:YYYY-MM-DD}.log",
         rotation="12:00",
@@ -35,9 +32,8 @@ def configure_logger(capture_exceptions: bool = False) -> None:
     logger.add(
         sys.stdout,
         colorize=True,
-        format="<green>{time:YYYY-MM-DD at HH:mm:ss}</green> | <level>{level}</level> | {file}:{line} | "
-        "{message}",
-        level=level,
+        format="<green>{time:YYYY-MM-DD at HH:mm:ss}</green> | <level>{level}</level> | {file}:{line} | {message}",
+        level="INFO",
     )
     if capture_exceptions:
         logger.add(
@@ -49,6 +45,13 @@ def configure_logger(capture_exceptions: bool = False) -> None:
             compression="zip",
         )
 
-    logging.basicConfig(handlers=[InterceptHandler()], level=logging.INFO)
+    # Принудительно перехватываем стандартный logging после Django
+    root = logging.getLogger()
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    root.addHandler(InterceptHandler())
+    root.setLevel(logging.INFO)
+
+    # Отключаем шумные логгеры при необходимости
     logger.disable("sqlalchemy")
     logger.disable("aioschedule")

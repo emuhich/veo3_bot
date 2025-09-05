@@ -21,7 +21,7 @@ async def user_start(message: Message, state: FSMContext):
             message.from_user.url,
             message.from_user.full_name,
         )
-    await message.answer(text="Добро пожаловать, выберите пункт меню", reply_markup=await menu_kb())
+    await message.answer(text="Добро пожаловать, выберите пункт меню:", reply_markup=await menu_kb())
 
 
 @user_router.callback_query(F.data == "back_to_menu")

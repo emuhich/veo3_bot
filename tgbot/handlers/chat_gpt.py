@@ -42,7 +42,6 @@ def split_long(text: str):
     return final
 
 
-# Кнопка в меню: callback_data="free_chatgpt" уже есть
 @chat_router.callback_query(F.data == "free_chatgpt")
 async def free_chat_start(call: CallbackQuery, state: FSMContext, config: Config):
     client = await select_client(call.message.chat.id)

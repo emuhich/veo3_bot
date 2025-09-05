@@ -1,10 +1,13 @@
+# tgbot/config.py
 from dataclasses import dataclass
-
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from environs import Env
 
-from tgbot.services.chat_gpt import ChatGPTService
 from tgbot.services.video_generate import VideoGeneratorService
+from tgbot.services.chat_gpt import ChatGPTService
+from tgbot.services.yookassa_service import YandexKassaService
+from tgbot.services.cryptobot_service import CryptoBotService
+from tgbot.services.stars_service import StarsPaymentService
 
 
 @dataclass
@@ -30,6 +33,9 @@ class TgBot:
     use_redis: bool
     veo_svc: VideoGeneratorService
     gpt_svc: ChatGPTService
+    yookassa_svc: YandexKassaService | None
+    cryptobot_svc: CryptoBotService | None
+    stars_svc: StarsPaymentService | None
 
 
 @dataclass
@@ -52,6 +58,23 @@ def load_config(path: str = None):
     env = Env()
     env.read_env(path)
 
+    # Инициализация платежных сервисов (если заданы переменные окружения)
+    yookassa = None
+    if env.str("YOOKASSA_SHOP_ID", default="") and env.str("YOOKASSA_API_KEY", default=""):
+        yookassa = YandexKassaService(
+            shop_id=env.str("YOOKASSA_SHOP_ID"),
+            api_key=env.str("YOOKASSA_API_KEY"),
+        )
+
+    cryptobot = None
+    if env.str("CRYPTOBOT_TOKEN", default=""):
+        cryptobot = CryptoBotService(
+            token=env.str("CRYPTOBOT_TOKEN"),
+            mainnet=env.bool("CRYPTOBOT_MAINNET", default=True),
+        )
+
+    stars = StarsPaymentService()  # без параметров
+
     return Config(
         tg_bot=TgBot(
             token=env.str("BOT_TOKEN"),
@@ -60,9 +83,12 @@ def load_config(path: str = None):
             veo_svc=VideoGeneratorService(
                 prompt_file=env.str("PROMPT_FILE"),
                 prompt_api_key=env.str("OPENROUTER_API_KEY"),
-                video_api_token=env.str("VEO_API_KEY")
+                video_api_token=env.str("VEO_API_KEY"),
             ),
-            gpt_svc=ChatGPTService(api_key=env.str("OPENAI_API_KEY"))
+            gpt_svc=ChatGPTService(api_key=env.str("OPENAI_API_KEY")),
+            yookassa_svc=yookassa,
+            cryptobot_svc=cryptobot,
+            stars_svc=stars,
         ),
         db=DbConfig(
             host=env.str("DB_HOST"),

@@ -95,11 +95,60 @@ class VideoGeneration(CreatedModel):
         null=True,
         blank=True,
     )
-
-    class Meta:
-        verbose_name = "Генерация видео"
-        verbose_name_plural = "Генерации видео"
-        ordering = ("-created",)
+    coins_charged = models.IntegerField(
+        default=0,
+        verbose_name="Списано монет",
+        help_text="Сколько монет списано за это видео"
+    )
 
     def __str__(self):
         return f"VideoGeneration {self.id} for {self.client}"
+
+
+class Payment(CreatedModel):
+    METHOD_CHOICES = [
+        ("yookassa", "YooKassa"),
+        ("cryptobot", "CryptoBot"),
+        ("stars", "Telegram Stars"),
+    ]
+    STATUS_CHOICES = [
+        ("pending", "Ожидает"),
+        ("paid", "Оплачен"),
+        ("failed", "Ошибка"),
+        ("canceled", "Отменён"),
+        ("expired", "Просрочен"),
+    ]
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        verbose_name="Клиент",
+    )
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    coins_requested = models.IntegerField(verbose_name="Монет запрошено")
+    amount_rub = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Сумма в рублях")
+    external_id = models.CharField(max_length=255, blank=True, null=True, verbose_name="ID во внешней системе")
+    external_payload = models.JSONField(blank=True, null=True)
+    check_url = models.URLField(blank=True, null=True, verbose_name="Ссылка на оплату")
+    comment = models.CharField(max_length=255, blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Платёж"
+        verbose_name_plural = "Платежи"
+        ordering = ("-created",)
+
+    def __str__(self):
+        return f"Payment {self.id} {self.method} {self.status}"
+
+    def mark_paid(self, dt):
+        self.status = "paid"
+        self.completed_at = dt
+        self.save()
+
+    def mark_failed(self, msg=None):
+        self.status = "failed"
+        if msg and not self.comment:
+            self.comment = msg
+        self.save()
