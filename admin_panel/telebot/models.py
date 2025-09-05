@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -32,6 +34,26 @@ class Client(CreatedModel):
     free_chat_daily_limit = models.IntegerField(default=10, verbose_name="Лимит бесплатных ChatGPT сообщений в день")
     free_chat_used_today = models.IntegerField(default=0, verbose_name="Использовано сегодня (ChatGPT)")
     free_chat_last_reset = models.DateField(null=True, blank=True, verbose_name="Дата последнего сброса лимита")
+    referral_code = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        null=True,
+        verbose_name="Реферальный код"
+    )
+    referral_earnings = models.IntegerField(
+        default=0,
+        verbose_name="Заработано на рефералах"
+    )
+
+    def ensure_referral_code(self):
+        if not self.referral_code:
+            while True:
+                code = uuid.uuid4().hex[:8]
+                if not Client.objects.filter(referral_code=code).exists():
+                    self.referral_code = code
+                    self.save(update_fields=["referral_code"])
+                    break
 
     def ensure_free_chat_quota(self, today):
         # Сброс лимита если день сменился
@@ -152,3 +174,28 @@ class Payment(CreatedModel):
         if msg and not self.comment:
             self.comment = msg
         self.save()
+
+
+class Referral(CreatedModel):
+    inviter = models.ForeignKey(
+        Client,
+        on_delete=models.CASCADE,
+        related_name="referrals_made",
+        verbose_name="Пригласивший"
+    )
+    invited = models.OneToOneField(
+        Client,
+        on_delete=models.CASCADE,
+        related_name="referral_origin",
+        verbose_name="Приглашённый"
+    )
+    reward_coins = models.IntegerField(default=0, verbose_name="Монет начислено пригласившему")
+    invited_bonus = models.IntegerField(default=0, verbose_name="Бонус приглашённому")
+
+    class Meta:
+        verbose_name = "Реферал"
+        verbose_name_plural = "Рефералы"
+        ordering = ("-created",)
+
+    def __str__(self):
+        return f"Referral {self.id}: {self.inviter_id} -> {self.invited_id}"

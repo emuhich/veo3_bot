@@ -78,8 +78,9 @@ async def main():
     from tgbot.handlers.video_create import video_router
     from tgbot.handlers.chat_gpt import chat_router
     from tgbot.handlers.balance import balance_router
+    from tgbot.handlers.referral import referral_router
 
-    for router in [user_router, video_router, chat_router, balance_router, echo_router]:
+    for router in [user_router, video_router, chat_router, balance_router, referral_router, echo_router]:
         dp.include_router(router)
 
     register_global_middlewares(dp, config)

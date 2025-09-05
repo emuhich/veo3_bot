@@ -3,11 +3,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 
 async def menu_kb():
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="Генерация видео", callback_data="generate_video")
-    keyboard.button(text="Пополнение баланса", callback_data="topup_start")
-    keyboard.button(text="Реферальная система", callback_data="referral_system")
-    keyboard.button(text="Бесплатный ChatGPT", callback_data="free_chatgpt")
-    keyboard.button(text="Поддержка", callback_data="support")
+    keyboard.button(text="🎥 Создать видео ", callback_data="generate_video")
+    keyboard.button(text="💰 Пополнить баланс", callback_data="topup_start")
+    keyboard.button(text="🎁 Подарки", callback_data="referral_system")
+    keyboard.button(text="🤖 Бесплатный ChatGPT", callback_data="free_chatgpt")
+    keyboard.button(text="👨‍💻 Поддержка", callback_data="support")
     return keyboard.adjust(1).as_markup()
 
 
@@ -19,8 +19,10 @@ async def back_to_menu_kb():
 
 async def video_format_kb():
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="Fast Version", callback_data="fast_version")
-    keyboard.button(text="Quality Version", callback_data="quality_version")
+    keyboard.button(text="💡 Fast version", callback_data="fast_version")
+    keyboard.button(text="🚀 Quality verison", callback_data="quality_version")
+    keyboard.button(text="📝 Инструкция", callback_data="how_to_use")
+    keyboard.button(text="🎥 Примеры", callback_data="video_examples")
     keyboard.button(text="В меню", callback_data="back_to_menu")
     return keyboard.adjust(1).as_markup()
 
