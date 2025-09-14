@@ -24,6 +24,7 @@ from admin_panel.telebot.admin import bot_admin
 
 urlpatterns = [
     path("tgbot/", include("admin_panel.telebot.urls", namespace="panel")),
+    path("config/", include("admin_panel.liveconfigs.urls", namespace="config")),
     path("", bot_admin.urls),
 ]
 

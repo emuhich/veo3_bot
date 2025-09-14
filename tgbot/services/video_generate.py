@@ -5,6 +5,8 @@ import base64
 import uuid
 import os
 
+from loguru import logger
+
 from tgbot.services.gemeni_prompt import GeminiPromptService
 
 
@@ -60,7 +62,7 @@ class VideoGeneratorService:
             image_urls.append(uploaded_url)
 
         prompt = await self.prompt_service.generate(prompt_user)
-
+        logger.info(f'Prompt before adaptation: {prompt}')
         payload = {
             "prompt": prompt,
             "imageUrls": image_urls,

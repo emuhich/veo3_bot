@@ -43,7 +43,7 @@ def split_long(text: str):
 
 
 @chat_router.callback_query(F.data == "free_chatgpt")
-async def free_chat_start(call: CallbackQuery, state: FSMContext, config: Config):
+async def free_chat_start(call: CallbackQuery, state: FSMContext):
     client = await select_client(call.message.chat.id)
     today = date.today()
     client.ensure_free_chat_quota(today)
@@ -58,7 +58,7 @@ async def free_chat_start(call: CallbackQuery, state: FSMContext, config: Config
 
 
 @chat_router.message(ChatStates.free_chat_question)
-async def free_chat_ask(message: Message, state: FSMContext, config: Config):
+async def free_chat_ask(message: Message, config: Config):
     question = message.text.strip() if message.text else ""
     if not question:
         await message.reply("Пустой вопрос. Напишите текст.")

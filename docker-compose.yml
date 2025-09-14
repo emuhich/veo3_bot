@@ -32,9 +32,10 @@ services:
     command: >
       sh -c "
       python django_app.py migrate &&
-      python django_app.py runserver 0.0.0.0:80 --noreload"
+      python django_app.py load_config &&
+      python django_app.py runserver 0.0.0.0:8000 --noreload"
     ports:
-      - "80:80"
+      - "8000:8000"
     networks:
       - tg_bot
     restart: always

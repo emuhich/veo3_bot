@@ -10,8 +10,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.storage.redis import RedisStorage
 from aioredis import Redis
 
-from tgbot.config import load_config, Config
+
 from tgbot.handlers.echo import echo_router
+from tgbot.middlewares.call_answer import CallAnswer
 from tgbot.middlewares.config import ConfigMiddleware
 from tgbot.middlewares.exaption import LogExceptionsMiddleware
 from tgbot.misc.logging import configure_logger
@@ -21,7 +22,7 @@ from tgbot.services import broadcaster
 logger = logging.getLogger(__name__)
 
 
-def scheduler_jobs(bot, config: Config):
+def scheduler_jobs(bot, config):
     from tgbot.misc.tasks import send_user_video, check_pending_payments
 
     config.misc.scheduler.add_job(send_user_video, "interval", minutes=1,
@@ -46,6 +47,7 @@ async def on_startup(bot: Bot, admin_ids: list[int], config):
 def register_global_middlewares(dp: Dispatcher, config):
     dp.message.outer_middleware(ConfigMiddleware(config))
     dp.callback_query.outer_middleware(ConfigMiddleware(config))
+    dp.callback_query.outer_middleware(CallAnswer())
     # dp.update.outer_middleware(LogExceptionsMiddleware())
 
 
@@ -59,6 +61,7 @@ async def main():
     setup_django()
 
     logger.info("Starting bot")
+    from tgbot.config import load_config
     config = load_config(".env")
 
     if config.misc.user_redis:

@@ -33,3 +33,7 @@ black
 requests
 aiocryptopay
 yookassa
+django-import-export ==2.8.0
+django-json-widget
+djangorestframework
+environ

@@ -123,6 +123,11 @@ class VideoGeneration(CreatedModel):
         help_text="Сколько монет списано за это видео"
     )
 
+    class Meta:
+        verbose_name = "Генерация видео"
+        verbose_name_plural = "Генерации видео"
+        ordering = ("-created",)
+
     def __str__(self):
         return f"VideoGeneration {self.id} for {self.client}"
 

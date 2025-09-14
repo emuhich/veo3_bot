@@ -9,22 +9,43 @@ from aiogram.types import CallbackQuery, Message, LabeledPrice
 
 from admin_panel.telebot.models import Payment, Client
 from tgbot.config import Config
-from tgbot.keyboards.inline import topup_amount_kb, topup_method_kb, topup_check_kb
+from tgbot.keyboards.inline import topup_amount_kb, topup_method_kb, topup_check_kb, menu_kb
 from tgbot.misc.states import BalanceStates
 from tgbot.models.db_commands import select_client, AsyncDatabaseOperations
 from tgbot.services.cryptobot_service import CryptoBotService
 from tgbot.services.yookassa_service import YandexKassaService
+from admin_panel.config import config as main_config
+from tgbot.misc.utils import get_usdt_rub_rate, RateFetchError
+import time
 
 balance_router = Router()
 
-COIN_RATE_RUB = 80  # 1 монета = 80 руб
-USDT_RATE_RUB = 95  # пример курса (введите обновление из внешнего источника)
-MIN_CUSTOM_COINS = 1
-MAX_CUSTOM_COINS = 1000
+_USDT_RATE_CACHE: dict = {"value": None, "ts": 0.0}
+_USDT_RATE_TTL = 120  # сек
+_FALLBACK_USDT_RATE = Decimal("95")
+
+
+async def get_cached_usdt_rate() -> Decimal:
+    now = time.time()
+    if (
+            _USDT_RATE_CACHE["value"] is None
+            or now - _USDT_RATE_CACHE["ts"] > _USDT_RATE_TTL
+    ):
+        try:
+            rate = await get_usdt_rub_rate()
+            # sanity check
+            if rate <= 0:
+                raise RateFetchError("non-positive rate")
+            _USDT_RATE_CACHE["value"] = rate
+            _USDT_RATE_CACHE["ts"] = now
+        except RateFetchError:
+            if _USDT_RATE_CACHE["value"] is None:
+                _USDT_RATE_CACHE["value"] = _FALLBACK_USDT_RATE
+    return _USDT_RATE_CACHE["value"]
 
 
 async def _create_payment(client: Client, coins: int) -> Payment:
-    amount_rub = Decimal(coins * COIN_RATE_RUB)
+    amount_rub = Decimal(coins * main_config.MainConfig.COIN_RATE_RUB)
     payment: Payment = await AsyncDatabaseOperations.create_object(
         Payment,
         client=client,
@@ -58,7 +79,7 @@ async def topup_choose_preset(call: CallbackQuery, state: FSMContext, config: Co
     await state.update_data(payment_id=payment.id)
     await state.set_state(BalanceStates.waiting_method)
     await call.message.edit_text(
-        f"Вы выбрали {coins} мон.\nК оплате: {coins * COIN_RATE_RUB} ₽.\nВыберите способ оплаты:",
+        f"Вы выбрали {coins} мон.\nК оплате: {coins * main_config.MainConfig.COIN_RATE_RUB} ₽.\nВыберите способ оплаты:",
         reply_markup=await topup_method_kb(payment.id)
     )
 
@@ -77,7 +98,7 @@ async def topup_custom_amount(message: Message, state: FSMContext, config: Confi
     await state.update_data(payment_id=payment.id)
     await state.set_state(BalanceStates.waiting_method)
     await message.answer(
-        f"Вы выбрали {coins} мон.\nИтого: {coins * COIN_RATE_RUB} ₽.\nМетод?",
+        f"Вы выбрали {coins} мон.\nИтого: {coins * main_config.MainConfig.COIN_RATE_RUB} ₽.\nМетод?",
         reply_markup=await topup_method_kb(payment.id)
     )
 
@@ -128,11 +149,10 @@ async def topup_method_select(call: CallbackQuery, state: FSMContext, config: Co
     if method_code == "cb":
         cb: CryptoBotService = config.tg_bot.cryptobot_svc
         desc = f"{payment.coins_requested} coins"
-        # Переводим рубли в USDT через примерный курс
-        usdt_amount = float(payment.amount_rub) / USDT_RATE_RUB
-        usdt_amount = round(usdt_amount, 2)
+        rate = await get_cached_usdt_rate()
+        usdt_amount = (payment.amount_rub / rate).quantize(Decimal("0.01"))
         try:
-            resp = await cb.create_invoice_usdt(usdt_amount, desc)
+            resp = await cb.create_invoice_usdt(float(usdt_amount), desc)
             payment.method = "cryptobot"
             payment.external_id = str(resp["invoice_id"])
             payment.check_url = resp["pay_url"]
@@ -142,7 +162,7 @@ async def topup_method_select(call: CallbackQuery, state: FSMContext, config: Co
             return
         await state.set_state(BalanceStates.waiting_payment)
         await call.message.edit_text(
-            f"Оплатите (USDT ≈ {usdt_amount}).\nСсылка:\n{payment.check_url}\nДалее нажмите 'Проверить оплату'.",
+            f"Оплатите (≈ {usdt_amount} USDT по курсу {rate}).\nСсылка:\n{payment.check_url}\nДалее 'Проверить оплату'.",
             reply_markup=await topup_check_kb(payment.id)
         )
         return
@@ -247,3 +267,25 @@ async def stars_success(message: Message):
     client.balance += payment.coins_requested
     client.save()
     await message.answer(f"Stars оплачено! Баланс: {client.balance} (+{payment.coins_requested}).")
+
+
+@balance_router.callback_query(F.data.startswith("topup_cancel_"))
+async def topup_cancel(call: CallbackQuery, state: FSMContext):
+    # Формат: topup_cancel_<id>
+    try:
+        payment_id = int(call.data.rsplit("_", 1)[-1])
+    except ValueError:
+        payment_id = None
+
+    if payment_id:
+        payment = await _load_payment(payment_id)
+        if payment and payment.status == "pending":
+            payment.status = "canceled"
+            payment.save(update_fields=["status"])
+
+    await state.clear()
+    user: Client = await select_client(call.message.chat.id)
+    await call.message.edit_text(
+        f"Пополнение отменено. Баланс: {user.balance} мон.",
+        reply_markup=await menu_kb()
+    )

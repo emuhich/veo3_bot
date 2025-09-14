@@ -1,16 +1,14 @@
-from aiogram import Router, Bot, F
+from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
+from admin_panel.config import config as main_config
 from admin_panel.telebot.models import Client, Referral
 from tgbot.keyboards.inline import menu_kb, back_to_menu_kb
 from tgbot.models.db_commands import select_client, create_client, AsyncDatabaseOperations
 
 user_router = Router()
-
-REF_INVITER_REWARD = 3
-REF_INVITED_BONUS = 1
 
 
 @user_router.message(Command(commands=["start"]))
@@ -53,26 +51,26 @@ async def user_start(message: Message, state: FSMContext):
                     Referral,
                     inviter=inviter,
                     invited=user,
-                    reward_coins=REF_INVITER_REWARD,
-                    invited_bonus=REF_INVITED_BONUS
+                    reward_coins=main_config.MainConfig.REF_INVITER_REWARD,
+                    invited_bonus=main_config.MainConfig.REF_INVITED_BONUS
                 )
                 # Начисления
-                inviter.balance += REF_INVITER_REWARD
-                inviter.referral_earnings += REF_INVITER_REWARD
+                inviter.balance += main_config.MainConfig.REF_INVITER_REWARD
+                inviter.referral_earnings += main_config.MainConfig.REF_INVITER_REWARD
                 inviter.save(update_fields=["balance", "referral_earnings"])
-                user.balance += REF_INVITED_BONUS
+                user.balance += main_config.MainConfig.REF_INVITED_BONUS
                 user.save(update_fields=["balance"])
 
                 try:
                     await message.bot.send_message(
                         inviter.telegram_id,
                         f"🎉 Новый реферал: @{user.username or user.telegram_id}. "
-                        f"+{REF_INVITER_REWARD} монет. Баланс: {inviter.balance}"
+                        f"+{main_config.MainConfig.REF_INVITER_REWARD} монет. Баланс: {inviter.balance}"
                     )
                 except Exception:
                     pass
                 await message.answer(
-                    f"Вы пришли по реферальной ссылке. Вам начислено +{REF_INVITED_BONUS} монета(ы). "
+                    f"Вы пришли по реферальной ссылке. Вам начислено +{main_config.MainConfig.REF_INVITED_BONUS} монета(ы). "
                     f"Ваш баланс: {user.balance}"
                 )
 
@@ -80,7 +78,7 @@ async def user_start(message: Message, state: FSMContext):
         "👋 Добро пожаловать в Veo3!\n"
         "За пару минут ты создашь видео из текста или фото.\n\n"
         "Что умею:\n"
-        "• 🎬 Генерация роликов (3 уровня качества)\n"
+        "• 🎬 Генерация роликов (2 уровня качества)\n"
         "• 🖼 Поддержка фото и стилей\n"
         "• 🔊 Озвучка (в Ultra/Pro)\n"
         "• 💎 Реферальные бонусы и акции\n\n"

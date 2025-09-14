@@ -6,37 +6,25 @@ from typing import Union
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from loguru import logger
 
 from admin_panel.telebot.models import Client, VideoGeneration
 from tgbot.config import Config
-from tgbot.keyboards.inline import video_format_kb, side_orientation_kb, back_to_menu_kb, wait_photo_kb, video_count_kb
+from tgbot.keyboards.inline import video_format_kb, side_orientation_kb, back_to_menu_kb, wait_photo_kb, video_count_kb, \
+    back_to_choice_format_kb, back_to_side_kb
 from tgbot.misc.states import States
 from tgbot.models.db_commands import AsyncDatabaseOperations, select_client
+from admin_panel.config import config as main_config
 
 video_router = Router()
 
 
 @video_router.callback_query(F.data == "generate_video")
 async def start_generate_video(call: CallbackQuery):
+    await call.answer(сache_time=1)
     text = (
         "💡 Fast version — быстро и дёшево (до 5 сек, без озвучки).\n\n"
-        "⚙️ Характеристики:\n"
-        "• Стоимость: 2 монеты\n"
-        "• Длительность: до 8 секунд\n"
-        "• Поддержка озвучки (стандартная)\n"
-        "• Загрузка фото: до 1 изображения\n"
-        "• Время генерации: 3–5 минут\n"
-        "• Качество: улучшенное\n"
-        "📝 Выбор соотношения сторон: 16:9 или 9:16\n\n"
-        "🚀 Quality version — максимум качества, до 8 сек, улучшенная озвучка.\n\n"
-        "🚀 Ultra — максимум качества, до 8 сек, улучшенная озвучка, авто улучшение промта для получения кинематографических кадров.\n\n"
-        "Премиум-качество и улучшенная озвучка:\n"
-        "• Стоимость: 4 монеты\n"
-        "• Длительность: до 8 сек\n"
-        "• Озвучка: улучшенная\n"
-        "• Фото: 1 изображение\n"
-        "• Время генерации: 5–7 мин\n"
-        "📝 Выбор соотношения сторон: 16:9 или 9:16"
+        "🚀 Ultra version — максимум качества, до 8 сек, улучшенная озвучка.\n\n"
     )
     await call.message.edit_text(text=text, reply_markup=await video_format_kb())
 
@@ -46,7 +34,29 @@ async def start_generate_video(call: CallbackQuery):
 async def choose_video_format(call: CallbackQuery, state: FSMContext):
     model_type = 'veo3_fast' if call.data == 'fast_version' else 'veo3'
     await state.update_data(model_type=model_type)
-    await call.message.edit_text(text="Выберите соотношение сторон.", reply_markup=await side_orientation_kb())
+    text_fast = (
+        "💡 Fast version — быстро и дёшево (до 5 сек, без озвучки).\n\n"
+        "⚙️ Характеристики:\n"
+        f"• Стоимость: {main_config.MainConfig.CONT_MONEY_PER_FAST_VERSION} монеты\n"
+        "• Длительность: до 8 секунд\n"
+        "• Поддержка озвучки (стандартная)\n"
+        "• Загрузка фото: до 1 изображения\n"
+        "• Время генерации: 3–5 минут\n"
+        "• Качество: улучшенное\n\n"
+        "📝 Выбор соотношения сторон: 16:9 или 9:16"
+    )
+    text_ultra = (
+        "🚀 Ultra version — максимум качества, до 8 сек, улучшенная озвучка.\n\n"
+        "Премиум-качество и улучшенная озвучка:\n"
+        f"• Стоимость: {main_config.MainConfig.CONT_MONEY_PER_NORMAL_VERSION} монеты\n"
+        "• Длительность: до 8 сек\n"
+        "• Озвучка: улучшенная\n"
+        "• Фото: 1 изображение\n"
+        "• Время генерации: 5–7 мин\n"
+        "📝 Выбор соотношения сторон: 16:9 или 9:16"
+    )
+    await call.message.edit_text(text=text_fast if call.data == 'fast_version' else text_ultra,
+                                 reply_markup=await side_orientation_kb())
 
 
 @video_router.callback_query(F.data == "side_16_9")
@@ -57,14 +67,15 @@ async def choose_side_orientation(call: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     await state.set_state(States.prompt)
     await call.message.edit_text(text="\n".join([
-        f"Вы выбрали формат видео: {'Fast Version' if data['model_type'] == 'veo3_fast' else 'Quality Version'}",
-        f"Соотношение сторон: {data['side_orientation']}",
-        f"Теперь отправьте текст для генерации видео или голосовое сообщение. Максимальная длина текста 500 символов.",
-    ]), reply_markup=await back_to_menu_kb())
+        f"✅ Вы выбрали формат: {'Fast Version' if data['model_type'] == 'veo3_fast' else 'Ultra Version'}",
+        f"🖼 Соотношение сторон: {data['side_orientation']}",
+        f"✍️ Отправьте текст (до 500 символов) или 🎤 голосовое сообщение для генерации видео.",
+    ]), reply_markup=await back_to_choice_format_kb(data.get("model_type")))
 
 
 @video_router.message(States.prompt, F.content_type.in_(['voice', 'text']))
 async def prompt_received(message: Message, state: FSMContext, config: Config):
+    data = await state.get_data()
     if message.voice:
         buf = BytesIO()
         file = await message.bot.get_file(message.voice.file_id)
@@ -80,14 +91,16 @@ async def prompt_received(message: Message, state: FSMContext, config: Config):
             await message.answer(f"Ошибка распознавания: {e}")
             return
         await state.update_data(prompt=text)
-        await message.answer(f"Распознанный текст:\n{text}\nТеперь отправьте фото.")
+        await message.answer(f"Распознанный текст:\n{text}\nТеперь отправьте фото.",
+                             reply_markup=await back_to_side_kb(data.get("side_orientation")))
     else:
         if not message.text:
-            await message.answer("Отправьте текст или голосовое сообщение.")
+            await message.answer("✍️ Отправьте текст (до 500 символов) или 🎤 голосовое сообщение для генерации видео.",
+                                 await back_to_choice_format_kb(data.get("model_type")))
             return
         await state.update_data(prompt=message.text[:500])
-
-    await message.answer("Текст получен. Теперь отправьте фото.", reply_markup=await wait_photo_kb())
+    await message.answer("✨ Отлично, текст получен!\n\n📷 Прикрепите фото (или нажмите «Пропустить»).",
+                         reply_markup=await wait_photo_kb(data.get("side_orientation")))
     await state.set_state(States.photo)
 
 
@@ -95,10 +108,12 @@ async def prompt_received(message: Message, state: FSMContext, config: Config):
 @video_router.callback_query(States.photo, F.data == "skip_photo")
 async def receive_photo(event: Union[Message, CallbackQuery], state: FSMContext):
     # Пропуск фото
+    data_state = await state.get_data()
     if isinstance(event, CallbackQuery):
         await event.message.delete()
         await state.update_data(photo_bytes=None, photo_filename=None, photo_mime=None)
-        await event.message.answer("Сколько видео сгенерировать?", reply_markup=await video_count_kb())
+        await event.message.answer("✨ Сколько роликов создать для вас?",
+                                   reply_markup=await video_count_kb(data_state.get("side_orientation")))
         return
 
     # Фото отправлено
@@ -111,13 +126,13 @@ async def receive_photo(event: Union[Message, CallbackQuery], state: FSMContext)
 
     ext = Path(file.file_path).suffix.lower() if file.file_path else ".jpg"
     filename = f"{uuid.uuid4().hex}{ext}"
-
     await state.update_data(
         photo_bytes=data,
         photo_filename=filename,
         photo_mime=f"image/{ext.lstrip('.')}"
     )
-    await msg.answer("Сколько видео сгенерировать?", reply_markup=await video_count_kb())
+    await msg.answer("✨ Сколько роликов создать для вас?",
+                     reply_markup=await video_count_kb(data_state.get("side_orientation")))
 
 
 @video_router.callback_query(F.data.in_(["vid_cnt_1", "vid_cnt_2", "vid_cnt_3"]))
@@ -125,10 +140,6 @@ async def choose_video_count(call: CallbackQuery, state: FSMContext, config: Con
     count = int(call.data.rsplit("_", 1)[-1])
     await call.message.edit_text(f"Запускаю генерацию {count} видео...")
     await generate_multiple_videos(call.message, state, config, count)
-
-
-FAST_COST = 2
-QUALITY_COST = 4
 
 
 async def generate_multiple_videos(message: Message, state: FSMContext, config: Config, count: int):
@@ -146,7 +157,7 @@ async def generate_multiple_videos(message: Message, state: FSMContext, config: 
 
     user: Client = await select_client(message.chat.id)
 
-    per_video_cost = FAST_COST if model == "veo3_fast" else QUALITY_COST
+    per_video_cost = main_config.MainConfig.CONT_MONEY_PER_FAST_VERSION if model == "veo3_fast" else main_config.MainConfig.CONT_MONEY_PER_NORMAL_VERSION
     total_cost = per_video_cost * count
 
     if user.balance < total_cost:
@@ -156,7 +167,8 @@ async def generate_multiple_videos(message: Message, state: FSMContext, config: 
             [InlineKeyboardButton(text="Назад в меню", callback_data="back_to_menu")]
         ])
         await message.answer(
-            f"Недостаточно монет.\nНужно: {total_cost}, у вас: {user.balance} (не хватает {need}).",
+            f"😔 Ой! Монет не хватает.\nНужно: {total_cost}, а у вас пока: {user.balance} (не хватает {need}).\n\n"
+            f"Пополните баланс, чтобы продолжить 🚀",
             reply_markup=kb
         )
         await state.set_state(None)
@@ -173,6 +185,7 @@ async def generate_multiple_videos(message: Message, state: FSMContext, config: 
 
     for idx in range(count):
         progress_msg = await message.answer(f"({idx + 1}/{count}) Адаптирую промпт ...")
+        logger.info(f'Prompt before adaptation: {prompt}')
         try:
             response = await config.tg_bot.veo_svc.generate_video(
                 prompt_user=prompt,
@@ -212,7 +225,7 @@ async def generate_multiple_videos(message: Message, state: FSMContext, config: 
             continue
 
         try:
-            await progress_msg.edit_text(f"({idx + 1}/{count}) Генерация... Ожидайте.")
+            await progress_msg.edit_text("⌛️")
         except Exception:
             pass
 

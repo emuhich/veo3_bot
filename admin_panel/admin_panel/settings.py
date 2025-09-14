@@ -39,7 +39,11 @@ CSRF_TRUSTED_ORIGINS = ["https://*.ngrok-free.app"]
 INSTALLED_APPS = [
     "admin_interface",
     "colorfield",
+    'admin_panel.liveconfigs.apps.LiveconfigsConfig',
+    "import_export",
     "admin_panel.telebot.apps.TelebotConfig",
+    'django_json_widget',
+    'rest_framework',
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -148,7 +152,7 @@ LOGGING = {
             "filename": filename,
             "formatter": "verbose",
         },
-        "console": {                                    # <— новый консольный вывод
+        "console": {  # <— новый консольный вывод
             "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
@@ -161,7 +165,11 @@ LOGGING = {
         },
     },
     "root": {
-        "handlers": ["file", "console"],               # <— добавлен console
+        "handlers": ["file", "console"],  # <— добавлен console
         "level": "INFO",
     },
 }
+
+LC_MAX_STR_LENGTH_DISPLAYED_AS_TEXTINPUT = 50
+LC_ENABLE_PRETTY_INPUT = True
+LIVECONFIGS_SYNCWRITE = True
