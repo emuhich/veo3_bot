@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, LabeledPrice
@@ -23,6 +23,8 @@ balance_router = Router()
 _USDT_RATE_CACHE: dict = {"value": None, "ts": 0.0}
 _USDT_RATE_TTL = 120  # сек
 _FALLBACK_USDT_RATE = Decimal("95")
+MIN_CUSTOM_COINS = 1
+MAX_CUSTOM_COINS = 10000
 
 
 async def get_cached_usdt_rate() -> Decimal:
@@ -111,11 +113,13 @@ async def _load_payment(payment_id: int) -> Optional[Payment]:
 
 
 @balance_router.callback_query(BalanceStates.waiting_method, F.data.startswith("topup_mtd_"))
-async def topup_method_select(call: CallbackQuery, state: FSMContext, config: Config):
+async def topup_method_select(call: CallbackQuery, state: FSMContext, config: Config, bot: Bot):
     parts = call.data.split("_")
     method_code = parts[2]
     payment_id = int(parts[3])
     payment = await _load_payment(payment_id)
+    me = await bot.get_me()
+    return_url = f"https://t.me/{me.username}"
     if not payment or payment.status != "pending":
         await call.message.edit_text("Платёж не найден или недоступен.")
         return
@@ -128,7 +132,7 @@ async def topup_method_select(call: CallbackQuery, state: FSMContext, config: Co
             resp = await yk.create_payment(
                 amount_rub=float(payment.amount_rub),
                 description=desc,
-                return_url="https://t.me/your_bot_username"
+                return_url=return_url
             )
             payment.method = "yookassa"
             payment.external_id = resp.get("id")
@@ -180,7 +184,7 @@ async def topup_method_select(call: CallbackQuery, state: FSMContext, config: Co
                 chat_id=call.message.chat.id,
                 title="Пополнение баланса",
                 description=f"{payment.coins_requested} монет",
-                provider_token="",  # для Stars оставить пустым
+                provider_token="",
                 currency="XTR",
                 prices=prices,
                 payload=f"stars_payment_{payment.id}",
@@ -196,7 +200,7 @@ async def topup_method_select(call: CallbackQuery, state: FSMContext, config: Co
 
 
 @balance_router.callback_query(BalanceStates.waiting_payment, F.data.startswith("topup_check_"))
-async def topup_check(call: CallbackQuery, state: FSMContext, config: Config):
+async def topup_check(call: CallbackQuery, config: Config):
     payment_id = int(call.data.rsplit("_", 1)[-1])
     payment = await _load_payment(payment_id)
     if not payment:
@@ -208,7 +212,6 @@ async def topup_check(call: CallbackQuery, state: FSMContext, config: Config):
 
     client = payment.client
 
-    # Проверка YooKassa
     if payment.method == "yookassa":
         yk: YandexKassaService = config.tg_bot.yookassa_svc
         info = await yk.get_payment(payment.external_id)

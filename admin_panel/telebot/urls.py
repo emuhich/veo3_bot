@@ -4,4 +4,6 @@ from . import views
 
 app_name = "panel"
 
-urlpatterns = []
+urlpatterns = [
+    path('mailing', views.mailing, name='mailing'),
+]

@@ -1,7 +1,10 @@
+from datetime import datetime
+
+import pytz
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 
-from admin_panel.telebot.models import Client
+from admin_panel.telebot.models import Client, Mailing
 
 
 class AsyncDatabaseOperations:
@@ -80,3 +83,14 @@ def create_client(username, telegram_id, url, name):
 def create_super_user(username, password):
     if not User.objects.filter(username=username).exists():
         User.objects.create_superuser(username, password=password)
+
+
+@sync_to_async()
+def get_all_malling():
+    now = datetime.now(pytz.timezone('Europe/Moscow'))
+    return Mailing.objects.filter(is_sent=False, date_malling__lte=now)
+
+
+@sync_to_async()
+def get_all_users():
+    return Client.objects.all()

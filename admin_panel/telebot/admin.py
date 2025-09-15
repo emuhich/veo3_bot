@@ -1,11 +1,13 @@
 from admin_interface.admin import ThemeAdmin
 from admin_interface.models import Theme
 from django.contrib import admin
-from django.contrib.admin import AdminSite
+from django.contrib.admin import AdminSite, ModelAdmin
 from django.utils.html import format_html
 from django.utils import timezone
 from django.db import transaction
-from admin_panel.telebot.models import Client, VideoGeneration, Payment, Referral
+
+from admin_panel.telebot.forms import MailingForm
+from admin_panel.telebot.models import Client, VideoGeneration, Payment, Referral, Mailing
 
 
 class BotAdminSite(AdminSite):
@@ -227,3 +229,27 @@ class ReferralAdmin(admin.ModelAdmin):
     list_select_related = ("inviter", "invited")
     date_hierarchy = "created"
     empty_value_display = "-пусто-"
+
+
+@admin.register(Mailing, site=bot_admin)
+class MailingAdmin(ModelAdmin):
+    add_form_template = 'tgbot/form_mailing.html'
+    list_display = (
+        'pk',
+        'media_type',
+        'text',
+        'file_id',
+        'date_malling',
+        'is_sent',
+    )
+
+    list_display_links = ('pk',)
+    empty_value_display = '-пусто-'
+
+    def add_view(self, request, form_url='', extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['form'] = MailingForm()
+        return super().add_view(request, form_url, extra_context)
+
+    class Meta:
+        verbose_name_plural = 'Рассылка'

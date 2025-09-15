@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 def scheduler_jobs(bot, config):
     from tgbot.misc.tasks import send_user_video, check_pending_payments
+    from tgbot.misc.mailing import start_milling
 
     config.misc.scheduler.add_job(send_user_video, "interval", minutes=1,
                                   kwargs={
@@ -34,6 +35,14 @@ def scheduler_jobs(bot, config):
                                   kwargs={
                                       'bot': bot,
                                       'config': config
+                                  })
+
+    config.misc.scheduler.add_job(start_milling, "interval", minutes=1,
+
+                                  kwargs={
+
+                                      'bot': bot
+
                                   })
 
 
